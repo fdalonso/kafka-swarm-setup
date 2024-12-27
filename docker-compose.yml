@@ -1,0 +1,340 @@
+version: "3.8"
+services:
+  kafka-service-controller:
+    image: confluentinc/cp-kafka:7.7.1
+    hostname: kafka-service-controller
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: 'controller'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT'
+      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka-service-controller:9093'
+      KAFKA_INTER_BROKER_LISTENER_NAME: 'PLAINTEXT'
+      KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
+      KAFKA_LISTENERS: 'CONTROLLER://0.0.0.0:9093' # 0.0.0.0 will bind with all host network adapters
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 2
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 2
+      CLUSTER_ID: 'LgvscNuXJ1Y5GXdXKhSAKQ==' # Create some unique hash an use it in all broker nodes 
+      KAFKA_LOG_DIRS: '/var/lib/kafka/data'
+    deploy:
+      restart_policy:
+        condition: any
+      mode: global
+      placement:
+        constraints:
+          - node.role == manager # Apply any valid constraints here. Another good approach is give label names to each swarm node and use it to deploy.
+    volumes:
+      - /kafka-data:/var/lib/kafka/data:rw
+    networks:
+      - kafka-network
+  
+  kafka-service-broker-1:
+    image: confluentinc/cp-kafka:7.7.1
+    ports:
+      - 29092:29092
+      - 29093:29093
+    hostname: kafka-broker-1 # If brokers will be secured by SSL certificate, don't forget to give a 'hostname' that will match to certificate Domain/CN name.
+    environment:
+      KAFKA_NODE_ID: 4
+      KAFKA_PROCESS_ROLES: 'broker'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT,SSL:SSL,SSL_HOST:SSL'
+      KAFKA_LISTENERS: 'PLAINTEXT://kafka-broker-1:19092,SSL://kafka-broker-1:19093,PLAINTEXT_HOST://0.0.0.0:29092,SSL_HOST://0.0.0.0:29093'
+      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://kafka-broker-1:19092,SSL://kafka-broker-1:19093,PLAINTEXT_HOST://<Host IP Address>:29092,SSL_HOST://<Host IP Address>:29093'
+      KAFKA_SSL_KEYSTORE_FILENAME: kafka-broker-1.keystore.pkcs12
+      KAFKA_SSL_KEYSTORE_CREDENTIALS: '<cert keystore pass>'
+      KAFKA_SSL_KEY_CREDENTIALS: '<key pass>'
+      KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
+      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka-service-controller:9093'
+      KAFKA_INTER_BROKER_LISTENER_NAME: 'PLAINTEXT'
+      KAFKA_JMX_HOSTNAME: kafka-broker-1
+      KAFKA_JMX_PORT: 9997
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 2 # Based on the number of broker nodes
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 2 # Based on the number of broker nodes
+      CLUSTER_ID: 'LgvscNuXJ1Y5GXdXKhSAKQ=='
+      KAFKA_LOG_DIRS: '/var/lib/kafka/data'
+    depends_on:
+      - kafka-service-controller
+    deploy:
+      restart_policy:
+          condition: any
+      mode: global    
+      placement:
+        constraints:
+          - "node.role==worker"
+    volumes:
+      - /kafka-broker-1-data:/var/lib/kafka/data:rw
+      - /kafka-broker-1-ssl-data:/etc/kafka/secrets:rw
+    networks:
+      - kafka-network
+
+  kafka-service-broker-2:
+    image: confluentinc/cp-kafka:7.7.1
+    ports:
+      - 39092:39092
+      - 39093:39093
+    hostname: kafka-broker-2
+    environment:
+      KAFKA_NODE_ID: 5
+      KAFKA_PROCESS_ROLES: 'broker'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT,SSL:SSL,SSL_HOST:SSL'
+      KAFKA_LISTENERS: 'PLAINTEXT://kafka-broker-2:19092,SSL://kafka-broker-2:19093,PLAINTEXT_HOST://0.0.0.0:39092,SSL_HOST://0.0.0.0:39093'
+      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://kafka-broker-2:19092,SSL://kafka-broker-2:19093,PLAINTEXT_HOST://<Host IP Address>:39092,SSL_HOST://<Host IP Address>:39093'
+      KAFKA_SSL_KEYSTORE_FILENAME: kafka-broker-2.keystore.pkcs12
+      KAFKA_SSL_KEYSTORE_CREDENTIALS: '<cert keystore pass>'
+      KAFKA_SSL_KEY_CREDENTIALS: '<key pass>'
+      KAFKA_JMX_HOSTNAME: kafka-broker-2
+      KAFKA_JMX_PORT: 9997
+      KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
+      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka-service-controller:9093'
+      KAFKA_INTER_BROKER_LISTENER_NAME: 'PLAINTEXT'
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 2
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 2
+      CLUSTER_ID: 'LgvscNuXJ1Y5GXdXKhSAKQ=='
+      KAFKA_LOG_DIRS: '/var/lib/kafka/data'
+    depends_on:
+      - kafka-service-controller
+    deploy:
+      restart_policy:
+          condition: any
+      mode: global    
+      placement:
+        constraints:
+          - "node.role==worker"
+    volumes:
+      - /kafka-broker-2-data:/var/lib/kafka/data:rw
+      - /kafka-broker-2-ssl-data:/etc/kafka/secrets:rw      
+    networks:
+      - kafka-network
+
+  kafka-schema-registry-service:
+    image: confluentinc/cp-schema-registry:7.7.1
+    hostname: kafka-schema-registry
+    depends_on:
+      - kafka-service-broker-1
+      - kafka-service-broker-2
+    ports:
+      - "8081:8081"
+    environment:
+      # Schema Registry Configration
+      SCHEMA_REGISTRY_HOST_NAME: kafka-schema-registry
+      SCHEMA_REGISTRY_LISTENERS: 'https://0.0.0.0:8081'
+      SCHEMA_REGISTRY_SCHEMA_REGISTRY_INTER_INSTANCE_PROTOCOL: "https" # Change to http (or do not use this property) if schema registry is not gone be secured by SSL certificate 
+      SCHEMA_REGISTRY_SSL_SECURITY_PROTOCOL: SSL
+      SCHEMA_REGISTRY_SSL_KEYSTORE_TYPE: PKCS12
+      SCHEMA_REGISTRY_SSL_KEYSTORE_LOCATION: /etc/kafka/secrets/kafka.server.keystore.p12
+      SCHEMA_REGISTRY_SSL_KEYSTORE_PASSWORD: <keystore pass>
+      SCHEMA_REGISTRY_SSL_KEY_PASSWORD: <key pass>
+      SCHEMA_REGISTRY_SSL_CLIENT_AUTHENTICATION: 'NONE'
+      # Brokers access configuration
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: 'kafka-broker-1:19093,kafka-broker-2:19093'
+      SCHEMA_REGISTRY_KAFKASTORE_SECURITY_PROTOCOL: SSL
+      SCHEMA_REGISTRY_KAFKASTORE_SSL_KEYSTORE_TYPE: PKCS12
+      SCHEMA_REGISTRY_KAFKASTORE_SSL_KEYSTORE_LOCATION: /etc/kafka/secrets/kafka.keystore.pkcs12
+      SCHEMA_REGISTRY_KAFKASTORE_SSL_KEYSTORE_PASSWORD: <keystore pass>
+      SCHEMA_REGISTRY_KAFKASTORE_SSL_TRUSTSTORE_TYPE: PKCS12
+      SCHEMA_REGISTRY_KAFKASTORE_SSL_TRUSTSTORE_LOCATION: /etc/kafka/secrets/kafka.truststore.pkcs12
+      SCHEMA_REGISTRY_KAFKASTORE_SSL_TRUSTSTORE_PASSWORD: <trustore pass>
+      SCHEMA_REGISTRY_KAFKASTORE_SSL_KEY_PASSWORD: <key pass>
+    deploy:
+      restart_policy:
+          condition: any
+      mode: global    
+      placement:
+        constraints:
+          - node.role == manager
+    volumes:
+      - /kafka-ssl-data:/etc/kafka/secrets
+    networks:
+      - kafka-network      
+
+  kafka-connect-service:
+    image: confluentinc/cp-kafka-connect:7.7.1
+    hostname: kafka-connect-service
+    depends_on:
+      - kafka-service-broker-1
+      - kafka-service-broker-2
+      - kafka-schema-registry-service
+    ports:
+      - 8083:8083
+    environment:
+      # Brokers access configuration
+      CONNECT_BOOTSTRAP_SERVERS: "kafka-broker-1:19093,kafka-broker-2:19093"
+      CONNECT_SECURITY_PROTOCOL: SSL
+      CONNECT_SSL_TRUSTSTORE_LOCATION: /var/private/ssl/kafka.truststore.pkcs12
+      CONNECT_SSL_TRUSTSTORE_PASSWORD: <truststore pass>
+      CONNECT_SSL_KEYSTORE_LOCATION: /var/private/ssl/kafka.keystore.pkcs12
+      CONNECT_SSL_KEYSTORE_PASSWORD: <keystore pass>
+      CONNECT_SSL_KEY_PASSWORD: <key pass>
+
+      CONNECT_PRODUCER_SECURITY_PROTOCOL: SSL
+      CONNECT_PRODUCER_SSL_TRUSTSTORE_LOCATION: /var/private/ssl/kafka.truststore.pkcs12
+      CONNECT_PRODUCER_SSL_TRUSTSTORE_PASSWORD: <truststore pass>
+      CONNECT_PRODUCER_SSL_KEYSTORE_LOCATION: /var/private/ssl/kafka.keystore.pkcs12
+      CONNECT_PRODUCER_SSL_KEYSTORE_PASSWORD: <keystore pass>
+      CONNECT_PRODUCER_SSL_KEY_PASSWORD: <key pass>
+
+      CONNECT_CONSUMER_SECURITY_PROTOCOL: SSL
+      CONNECT_CONSUMER_SSL_TRUSTSTORE_LOCATION: /var/private/ssl/kafka.truststore.pkcs12
+      CONNECT_CONSUMER_SSL_TRUSTSTORE_PASSWORD: <truststore pass>
+      CONNECT_CONSUMER_SSL_KEYSTORE_LOCATION: /var/private/ssl/kafka.keystore.pkcs12
+      CONNECT_CONSUMER_SSL_KEYSTORE_PASSWORD: <keystore pass>
+      CONNECT_CONSUMER_SSL_KEY_PASSWORD: <key pass>
+
+      # Schema Registry access configuration
+      CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_URL: 'https://kafka-schema-registry:8081'
+      CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_SSL_TRUSTSTORE_TYPE: PKCS12
+      CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_SSL_TRUSTSTORE_LOCATION: /var/private/ssl/kafka.truststore.pkcs12
+      CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_SSL_TRUSTSTORE_PASSWORD: <truststore pass>
+      CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_SSL_KEYSTORE_TYPE: PKCS12 
+      CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_SSL_KEYSTORE_LOCATION: /var/private/ssl/kafka.keystore.pkcs12
+      CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_SSL_KEYSTORE_PASSWORD: <keystore pass>
+      CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_SSL_KEY_PASSWORD: <key pass>
+      # Connect Server configuration  
+      CONNECT_REST_PORT: 8083
+      CONNECT_REST_ADVERTISED_HOST_NAME: "kafka-connect-service"
+      CONNECT_KEY_CONVERTER: org.apache.kafka.connect.storage.StringConverter
+      CONNECT_VALUE_CONVERTER: io.confluent.connect.avro.AvroConverter
+      CONNECT_GROUP_ID: kafka-connect-service
+      CONNECT_CONFIG_STORAGE_TOPIC: _connect-configs
+      CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: "1"
+      CONNECT_OFFSET_STORAGE_TOPIC: _connect-offsets
+      CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR: "1"
+      CONNECT_STATUS_STORAGE_TOPIC: _connect-status
+      CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: "1"
+      CONNECT_LOG4J_APPENDER_STDOUT_LAYOUT_CONVERSIONPATTERN: "[%d] %p %X{connector.context}%m (%c:%L)%n"
+      CONNECT_LOG4J_LOGGERS: log4j.logger.io.confluent.JdbcSourceConnector=DEBUG,org.apache.kafka.connect=DEBUG,log4j.logger.io.confluent.src-sqlserver-cdr-sf-verizon=DEBUG"
+      CONNECT_PLUGIN_PATH: /usr/share/java,/usr/share/confluent-hub-components,/data/connect-jars
+    volumes:
+      - /jar-connectors:/data/connect-jars # optional
+      - /kafka-ssl-data:/var/private/ssl
+    # Use this area to install all necessary connectors (optional)
+    command:
+      - bash
+      - -c
+      - |
+        echo "Installing Connector(s)"
+        confluent-hub install --no-prompt confluentinc/kafka-connect-jdbc:10.8.0
+        #
+        echo "Launching Kafka Connect worker"
+        /etc/confluent/docker/run &
+        #
+        sleep infinity
+    deploy:
+      restart_policy:
+        condition: any
+      mode: global    
+      placement:
+        constraints:
+          - node.role == manager
+    networks:
+      - kafka-network        
+
+  kafka-ui-service:
+    hostname: kafka-ui-service
+    image: provectuslabs/kafka-ui:v0.7.2
+    ports:
+      - 9023:8080
+    depends_on:
+      - kafka-service-broker-1
+      - kafka-service-broker-2
+      - kafka-schema-registry-service
+      - kafka-connect-service
+    environment:
+      # Brokers access configuration
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: 'kafka-broker-1:19093,kafka-broker-2:19093'
+      KAFKA_CLUSTERS_0_PROPERTIES_SECURITY_PROTOCOL: SSL
+      KAFKA_CLUSTERS_0_PROPERTIES_SSL_KEYSTORE_LOCATION: /kafka.keystore.pkcs12
+      KAFKA_CLUSTERS_0_PROPERTIES_SSL_KEYSTORE_PASSWORD: <keystore pass>
+      KAFKA_CLUSTERS_0_SSL_TRUSTSTORELOCATION: /kafka.truststore.pkcs12
+      KAFKA_CLUSTERS_0_SSL_TRUSTSTOREPASSWORD: <truststore pass>
+      KAFKA_CLUSTERS_0_PROPERTIES_SSL_ENDPOINT_IDENTIFICATION_ALGORITHM: '' # DISABLE COMMON NAME VERIFICATION
+      KAFKA_CLUSTERS_0_METRICS_PORT: 9997 # This port must match with brokers KAFKA_JMX_PORT property
+      # Schema Registry access configuration
+      KAFKA_CLUSTERS_0_SCHEMAREGISTRY: https://kafka-schema-registry:8081
+      KAFKA_CLUSTERS_0_SCHEMAREGISTRYSSL_KEYSTORELOCATION: /kafka.keystore.pkcs12
+      KAFKA_CLUSTERS_0_SCHEMAREGISTRYSSL_KEYSTOREPASSWORD: <keystore pass>
+      # Connect Server access configuration
+      KAFKA_CLUSTERS_0_KAFKACONNECT_0_NAME: first
+      KAFKA_CLUSTERS_0_KAFKACONNECT_0_ADDRESS: http://kafka-connect-service:8083
+      # KsqlDb Server access configuration
+      KAFKA_CLUSTERS_0_KSQLDBSERVER: http://kafka-ksqldb-service-db:8088
+      # Kafka-UI Server configuration
+      SERVER_SSL_ENABLED: 'true'
+      SERVER_SSL_KEY_STORE_TYPE: 'PKCS12'
+      SERVER_SSL_KEY_STORE: '/kafka.server.keystore.p12'
+      SERVER_SSL_KEY_STORE_PASSWORD: <keystore pass>
+      TRUST_STORE: '/kafka.truststore.pkcs12'
+      TRUST_STORE_PASSWORD: <truststore pass>
+      AUTH_TYPE: "LOGIN_FORM"
+      SPRING_SECURITY_USER_NAME: adminUser
+      SPRING_SECURITY_USER_PASSWORD: adminPass
+      DYNAMIC_CONFIG_ENABLED: 'true'
+    deploy:
+      restart_policy:
+          condition: any
+      mode: global    
+      placement:
+        constraints:
+          - node.role == manager
+    volumes:
+      - /kafka-ssl-data/kafka.keystore.pkcs12:/kafka.keystore.pkcs12
+      - /kafka-ssl-data/kafka.truststore.pkcs12:/kafka.truststore.pkcs12
+      - /kafka-ssl-data/kafka.server.keystore.p12:/kafka.server.keystore.p12      
+    networks:
+      - kafka-network      
+
+  kafka-ksqldb-service-db:
+    image: confluentinc/cp-ksqldb-server:7.7.1
+    hostname: kafka-ksqldb-service-db
+    depends_on:
+      - kafka-service-broker-1
+      - kafka-service-broker-2
+      - kafka-schema-registry-service
+      - kafka-connect-service
+    ports:
+      - "8088:8088"
+    environment:
+      # Brokers access configuration
+      KSQL_BOOTSTRAP_SERVERS: "kafka-broker-1:19093,kafka-broker-2:19093"
+      KSQL_SECURITY_PROTOCOL: SSL
+      KSQL_SSL_TRUSTSTORE_TYPE: PKCS12
+      KSQL_SSL_TRUSTSTORE_LOCATION: /etc/kafka/secrets/kafka.truststore.pkcs12
+      KSQL_SSL_TRUSTSTORE_PASSWORD: <truststore pass>
+      KSQL_SSL_KEYSTORE_TYPE: PKCS12
+      KSQL_SSL_KEYSTORE_LOCATION: /etc/kafka/secrets/kafka.keystore.pkcs12
+      KSQL_SSL_KEYSTORE_PASSWORD: <keystore pass>
+      KSQL_SSL_KEY_PASSWORD: <key pass>
+      # Schema Registry access configuration
+      KSQL_KSQL_SCHEMA_REGISTRY_URL: "https://kafka-schema-registry:8081"
+      KSQL_KSQL_SCHEMA_REGISTRY_SSL_TRUSTSTORE_LOCATION: "/etc/kafka/secrets/kafka.truststore.pkcs12"
+      KSQL_KSQL_SCHEMA_REGISTRY_SSL_TRUSTSTORE_PASSWORD: "<truststore pass>"
+      # Connect Server access configuration
+      KSQL_KSQL_CONNECT_URL: "http://kafka-connect-service:8083"
+      # KsqlDb Server configuration
+      KSQL_CONFIG_DIR: "/etc/ksql"
+      KSQL_HOST_NAME: kafka-ksqldb-service-db
+      KSQL_LISTENERS: "http://0.0.0.0:8088"
+      KSQL_CACHE_MAX_BYTES_BUFFERING: 0
+      KSQL_PRODUCER_INTERCEPTOR_CLASSES: "io.confluent.monitoring.clients.interceptor.MonitoringProducerInterceptor"
+      KSQL_CONSUMER_INTERCEPTOR_CLASSES: "io.confluent.monitoring.clients.interceptor.MonitoringConsumerInterceptor"
+      KSQL_KSQL_LOGGING_PROCESSING_TOPIC_REPLICATION_FACTOR: 1
+      KSQL_KSQL_LOGGING_PROCESSING_TOPIC_AUTO_CREATE: 'true'
+      KSQL_KSQL_LOGGING_PROCESSING_STREAM_AUTO_CREATE: 'true'
+    deploy:
+      restart_policy:
+          condition: any
+      mode: global    
+      placement:
+        constraints:
+          - node.role == manager  
+    volumes:
+      - /kafka-ssl-data:/etc/kafka/secrets
+    networks:
+      - kafka-network
+networks:
+  kafka-network:
+     external:
+      name: kafka-stack-network
