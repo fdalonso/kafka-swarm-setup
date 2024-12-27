@@ -1,5 +1,5 @@
 # kafka-swarm-setup
-kafka docker-compose.yml to be used with docker swarm. setup is prepared to prd envs.
+kafka docker-compose.yml to be used with docker swarm. setup is prepared for prd envs.
 
 this docker-compose is using KRaft kafka mode instead zookeeper configuration, since the use of zookeeper will be discontinued in further kafka releases.
 more information here: https://developer.confluent.io/learn/kraft/
