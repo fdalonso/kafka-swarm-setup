@@ -204,7 +204,7 @@ services:
       CONNECT_STATUS_STORAGE_TOPIC: _connect-status
       CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: "1"
       CONNECT_LOG4J_APPENDER_STDOUT_LAYOUT_CONVERSIONPATTERN: "[%d] %p %X{connector.context}%m (%c:%L)%n"
-      CONNECT_LOG4J_LOGGERS: log4j.logger.io.confluent.JdbcSourceConnector=DEBUG,org.apache.kafka.connect=DEBUG,log4j.logger.io.confluent.src-sqlserver-cdr-sf-verizon=DEBUG"
+      CONNECT_LOG4J_LOGGERS: log4j.logger.io.confluent.JdbcSourceConnector=DEBUG,org.apache.kafka.connect=DEBUG"
       CONNECT_PLUGIN_PATH: /usr/share/java,/usr/share/confluent-hub-components,/data/connect-jars
     volumes:
       - /jar-connectors:/data/connect-jars # optional
